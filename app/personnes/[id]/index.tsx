@@ -55,6 +55,7 @@ export default function PersonneDetail() {
   const route = useRoute<RouteProp<RouteParams>>();
   const { id } = route.params || {};
 
+
   const [personne, setPersonne] = useState<Personne | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -180,6 +181,7 @@ export default function PersonneDetail() {
             onPress={() =>
               {
                   const id = personne.id.toString();
+                  console.log(id)
                   router.push(`/personnes/${id}/edit`);
                 }
             }

@@ -1,40 +1,99 @@
-import { Picker } from '@react-native-picker/picker';
+import DropDownPicker from 'react-native-dropdown-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import {
     ActivityIndicator,
     Alert,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
+import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { apiFetch } from "../services/FetchAPI";
+
+interface Personne {
+  id: number;
+  first_name: string;
+  last_name: string;
+  gender: string;
+  birth_date: string;
+  birth_place?: string;
+  fatherId?: number;
+  motherId?: number;
+  conjointId?: number;
+  notes?: string;
+  dateDeces?: string;
+  photo?: string;
+}
+
+interface PersonFormProps {
+  initialData?: Personne | null;
+  mode?: "add" | "edit";
+  onSuccess?: (() => void) | null;
+}
+
+interface ImageAsset {
+  uri: string;
+  type?: string;
+  name?: string;
+}
+
+interface DropdownItem {
+  label: string;
+  value: string;
+}
+
+// Fonction utilitaire pour convertir dataURI en Blob
+function dataURItoBlob(dataURI: string): Blob {
+  const byteString = atob(dataURI.split(',')[1]);
+  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeString });
+}
 
 export default function PersonForm({ 
   initialData = null, 
-  mode = "add", // "add" ou "edit"
+  mode = "add",
   onSuccess = null 
-}) {
-  const [first_name, setFirstName] = useState("");
-  const [last_name, setLastName] = useState("");
-  const [gender, setGender] = useState("");
-  const [birth_date, setBirthDate] = useState("");
-  const [birth_place, setBirthPlace] = useState("");
-  const [father, setFather] = useState("");
-  const [mother, setMother] = useState("");
-  const [conjoint, setConjoint] = useState("");
-  const [photo, setPhoto] = useState(null);
-  const [notes, setNotes] = useState("");
-  const [date_deces, setDateDeces] = useState("");
-  const [personnes, setPersonnes] = useState([]);
-  const [showDateDeces, setShowDateDeces] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState({ birth: false, death: false });
-  
+}: PersonFormProps): JSX.Element {
+  const [first_name, setFirstName] = useState<string>("");
+  const [last_name, setLastName] = useState<string>("");
+  const [gender, setGender] = useState<string>("");
+  const [birth_date, setBirthDate] = useState<string>("");
+  const [birth_place, setBirthPlace] = useState<string>("");
+  const [father, setFather] = useState<string>("");
+  const [mother, setMother] = useState<string>("");
+  const [conjoint, setConjoint] = useState<string>("");
+  const [photo, setPhoto] = useState<ImageAsset | null>(null);
+  const [notes, setNotes] = useState<string>("");
+  const [date_deces, setDateDeces] = useState<string>("");
+  const [personnes, setPersonnes] = useState<Personne[]>([]);
+  const [showDateDeces, setShowDateDeces] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // États pour les dropdowns
+  const [genderOpen, setGenderOpen] = useState<boolean>(false);
+  const [fatherOpen, setFatherOpen] = useState<boolean>(false);
+  const [motherOpen, setMotherOpen] = useState<boolean>(false);
+  const [conjointOpen, setConjointOpen] = useState<boolean>(false);
+
+  // Items pour les dropdowns
+  const [genderItems, setGenderItems] = useState<DropdownItem[]>([
+    {label: 'Homme', value: 'Homme'},
+    {label: 'Femme', value: 'Femme'}
+  ]);
+  const [fatherItems, setFatherItems] = useState<DropdownItem[]>([]);
+  const [motherItems, setMotherItems] = useState<DropdownItem[]>([]);
+  const [conjointItems, setConjointItems] = useState<DropdownItem[]>([]);
+
   const router = useRouter();
 
   // Initialiser le formulaire avec les données existantes
@@ -45,12 +104,15 @@ export default function PersonForm({
       setGender(initialData.gender || "");
       setBirthDate(initialData.birth_date || "");
       setBirthPlace(initialData.birth_place || "");
-      setFather(initialData.fatherId || "");
-      setMother(initialData.motherId || "");
-      setConjoint(initialData.conjointId || "");
+      setFather(initialData.fatherId ? initialData.fatherId.toString() : "");
+      setMother(initialData.motherId ? initialData.motherId.toString() : "");
+      setConjoint(initialData.conjointId ? initialData.conjointId.toString() : "");
       setNotes(initialData.notes || "");
       setDateDeces(initialData.dateDeces || "");
       setShowDateDeces(!!initialData.dateDeces);
+      if (initialData.photo) {
+        setPhoto({ uri: initialData.photo });
+      }
     }
   }, [initialData, mode]);
 
@@ -58,48 +120,53 @@ export default function PersonForm({
   useEffect(() => {
     apiFetch("/personnes")
       .then((res) => res.json())
-      .then((data) => setPersonnes(data))
+      .then((data: Personne[]) => {
+        setPersonnes(data);
+        updateDropdownItems(data);
+      })
       .catch((error) => {
         console.error("Erreur lors du chargement des personnes:", error);
         Alert.alert("Erreur", "Impossible de charger la liste des personnes");
       });
   }, []);
 
-  // Réinitialiser le conjoint si le genre change et n'est plus compatible
+  // Mettre à jour les items des dropdowns
+  const updateDropdownItems = (personnesData: Personne[]) => {
+    const hommes = personnesData
+      .filter(p => p.gender === "Homme" && (!initialData || p.id !== initialData.id))
+      .map(p => ({ label: `${p.last_name} ${p.first_name}`, value: p.id.toString() }));
+    
+    const femmes = personnesData
+      .filter(p => p.gender === "Femme" && (!initialData || p.id !== initialData.id))
+      .map(p => ({ label: `${p.last_name} ${p.first_name}`, value: p.id.toString() }));
+
+    setFatherItems(hommes);
+    setMotherItems(femmes);
+  };
+
+  // Mettre à jour les options de conjoint selon le genre
   useEffect(() => {
-    if (conjoint && gender) {
-      const selectedConjoint = personnes.find(p => p.id.toString() === conjoint.toString());
-      if (selectedConjoint) {
-        const expectedGender = gender === "Homme" ? "Femme" : "Homme";
-        if (selectedConjoint.gender !== expectedGender) {
-          setConjoint(""); // Réinitialiser si incompatible
+    if (gender && personnes.length > 0) {
+      const targetGender = gender === "Homme" ? "Femme" : "Homme";
+      const conjointOptions = personnes
+        .filter(p => p.gender === targetGender && (!initialData || p.id !== initialData.id))
+        .map(p => ({ label: `${p.last_name} ${p.first_name}`, value: p.id.toString() }));
+      
+      setConjointItems(conjointOptions);
+
+      // Vérifier si le conjoint actuel est toujours valide
+      if (conjoint) {
+        const isValidConjoint = conjointOptions.some(option => option.value === conjoint);
+        if (!isValidConjoint) {
+          setConjoint("");
         }
       }
+    } else {
+      setConjointItems([]);
     }
-  }, [gender, conjoint, personnes]);
+  }, [gender, personnes, initialData, conjoint]);
 
-  // Fonctions de filtrage par genre
-  const getFilteredPersonnes = (targetGender, excludeSelf = true) => {
-    return personnes.filter(p => {
-      // Exclure la personne elle-même en mode édition
-      if (excludeSelf && mode === "edit" && initialData && p.id === initialData.id) {
-        return false;
-      }
-      // Filtrer par genre
-      return p.gender === targetGender;
-    });
-  };
-
-  const getConjointOptions = () => {
-    if (!gender) return []; // Pas d'options si le genre n'est pas sélectionné
-    
-    // Si la personne est un homme, montrer les femmes
-    // Si la personne est une femme, montrer les hommes
-    const targetGender = gender === "Homme" ? "Femme" : "Homme";
-    return getFilteredPersonnes(targetGender, true);
-  };
-
-  const pickImage = async () => {
+  const pickImage = async (): Promise<void> => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (permissionResult.granted === false) {
@@ -119,13 +186,7 @@ export default function PersonForm({
     }
   };
 
-  const formatDateForDisplay = (dateString) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR');
-  };
-
-  const handleSubmit = async () => {
+  const handleSubmit = async (): Promise<void> => {
     if (!first_name || !last_name || !gender || !birth_date) {
       Alert.alert("Erreur", "Veuillez remplir tous les champs obligatoires");
       return;
@@ -135,25 +196,69 @@ export default function PersonForm({
 
     try {
       const formData = new FormData();
+      
+      // Données de base
       formData.append("first_name", first_name);
       formData.append("last_name", last_name);
       formData.append("gender", gender);
-      formData.append("birth_date", birth_date);
       formData.append("birth_place", birth_place);
-      if (father) formData.append("fatherId", father);
-      if (mother) formData.append("motherId", mother);
-      if (conjoint) formData.append("conjointId", conjoint);
-      if (photo) {
-        formData.append("photo", {
-          uri: photo.uri,
-          type: "image/jpeg",
-          name: "photo.jpg",
-        });
-      }
       formData.append("notes", notes);
-      if (date_deces) formData.append("dateDeces", date_deces);
 
-      const url = mode === "edit" ? `/personnes/${initialData.id}` : "/personnes";
+      // Date de naissance - conversion si nécessaire
+      if (birth_date.includes('/')) {
+        const parts = birth_date.split('/');
+        if (parts.length === 3) {
+          formData.append("birth_date", `${parts[2]}-${parts[1]}-${parts[0]}`);
+        } else {
+          formData.append("birth_date", birth_date);
+        }
+      } else {
+        formData.append("birth_date", birth_date);
+      }
+
+      // Relations familiales
+      formData.append("fatherId", father || '');
+      formData.append("motherId", mother || '');
+      formData.append("conjointId", conjoint || '');
+
+      // Date de décès
+      if (date_deces) {
+        if (date_deces.includes('/')) {
+          const parts = date_deces.split('/');
+          if (parts.length === 3) {
+            formData.append("dateDeces", `${parts[2]}-${parts[1]}-${parts[0]}`);
+          } else {
+            formData.append("dateDeces", date_deces);
+          }
+        } else {
+          formData.append("dateDeces", date_deces);
+        }
+      }
+
+      // Gestion de la photo
+      if (photo && photo.uri) {
+        const uri = photo.uri;
+        let name = 'photo.jpg';
+        let type = 'image/jpeg';
+
+        if (typeof uri === 'string' && uri.startsWith('data:')) {
+          const match = uri.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
+          if (match) {
+            type = match[1];
+            const ext = type.split('/')[1] || 'jpg';
+            name = `photo.${ext}`;
+          }
+          const blob = dataURItoBlob(uri);
+          formData.append('photo', blob, name);
+        } else if (typeof uri === 'string') {
+          name = uri.split('/').pop() || 'photo.jpg';
+          const extMatch = /\.(\w+)$/.exec(name);
+          type = extMatch ? `image/${extMatch[1]}` : 'image/jpeg';
+          formData.append('photo', { uri, name, type } as any);
+        }
+      }
+
+      const url = mode === "edit" ? `/personnes/${initialData?.id}/` : "/personnes/";
       const method = mode === "edit" ? "PUT" : "POST";
 
       const response = await apiFetch(url, {
@@ -180,6 +285,7 @@ export default function PersonForm({
         );
       } else {
         const errorText = await response.text();
+        console.error('Erreur serveur:', errorText);
         throw new Error(errorText);
       }
     } catch (error) {
@@ -190,7 +296,7 @@ export default function PersonForm({
     }
   };
 
-  const resetForm = () => {
+  const resetForm = (): void => {
     setFirstName("");
     setLastName("");
     setGender("");
@@ -205,30 +311,33 @@ export default function PersonForm({
     setShowDateDeces(false);
   };
 
-  const renderPickerItems = (options, placeholder) => [
-    <Picker.Item key="empty" label={placeholder} value="" color="#9CA3AF" />,
-    ...options.map(option => (
-      <Picker.Item 
-        key={option.id} 
-        label={`${option.last_name} ${option.first_name}`} 
-        value={option.id.toString()}
-        color="white"
-      />
-    ))
-  ];
+  // Fonction pour fermer tous les dropdowns sauf celui spécifié
+  const closeOtherDropdowns = (exceptDropdown: string) => {
+    if (exceptDropdown !== 'gender') setGenderOpen(false);
+    if (exceptDropdown !== 'father') setFatherOpen(false);
+    if (exceptDropdown !== 'mother') setMotherOpen(false);
+    if (exceptDropdown !== 'conjoint') setConjointOpen(false);
+  };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.formContainer}>
+    <KeyboardAwareScrollView 
+      style={styles.container} 
+      showsVerticalScrollIndicator={false}
+      nestedScrollEnabled={true}
+    >
+      <Animated.View 
+        entering={FadeIn.duration(500)} 
+        style={styles.formContainer}
+      >
         {/* Titre */}
-        <View style={styles.headerContainer}>
+        <Animated.View entering={SlideInDown.delay(100)} style={styles.headerContainer}>
           <Text style={styles.title}>
             {mode === "edit" ? "Modifier une personne" : "Ajouter une personne"}
           </Text>
-        </View>
+        </Animated.View>
 
         {/* Section Identité */}
-        <View style={styles.sectionContainer}>
+        <Animated.View entering={SlideInDown.delay(200)} style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>👤 Identité</Text>
           </View>
@@ -283,20 +392,24 @@ export default function PersonForm({
 
           {/* Sexe et Photo */}
           <View style={styles.rowContainer}>
-            <View style={styles.inputHalf}>
+            <View style={[styles.inputHalf, { zIndex: 1000 }]}>
               <Text style={styles.label}>Sexe *</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={gender}
-                  style={styles.picker}
-                  onValueChange={setGender}
-                  dropdownIconColor="white"
-                >
-                  <Picker.Item label="--Choisir--" value="" color="#9CA3AF" />
-                  <Picker.Item label="Homme" value="Homme" color="white" />
-                  <Picker.Item label="Femme" value="Femme" color="white" />
-                </Picker>
-              </View>
+              <DropDownPicker
+                open={genderOpen}
+                value={gender}
+                items={genderItems}
+                setOpen={setGenderOpen}
+                setValue={setGender}
+                setItems={setGenderItems}
+                onOpen={() => closeOtherDropdowns('gender')}
+                placeholder="--Choisir--"
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                placeholderStyle={styles.dropdownPlaceholder}
+                arrowIconStyle={styles.dropdownArrow}
+                tickIconStyle={styles.dropdownTick}
+              />
             </View>
             <View style={styles.inputHalf}>
               <Text style={styles.label}>Photo</Text>
@@ -307,63 +420,93 @@ export default function PersonForm({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Séparateur */}
         <View style={styles.separator} />
 
         {/* Section Famille */}
-        <View style={styles.sectionContainer}>
+        <Animated.View entering={SlideInDown.delay(300)} style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>👥 Famille et relations</Text>
           </View>
 
           {/* Père et Mère */}
           <View style={styles.rowContainer}>
-            <View style={styles.inputHalf}>
+            <View style={[styles.inputHalf, { zIndex: 900 }]}>
               <Text style={styles.label}>Père</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={father}
-                  style={styles.picker}
-                  onValueChange={setFather}
-                  dropdownIconColor="white"
-                >
-                  {renderPickerItems(getFilteredPersonnes("Homme", true), "--Aucun--")}
-                </Picker>
-              </View>
+              <DropDownPicker
+                open={fatherOpen}
+                value={father}
+                items={fatherItems}
+                setOpen={setFatherOpen}
+                setValue={setFather}
+                setItems={setFatherItems}
+                onOpen={() => closeOtherDropdowns('father')}
+                placeholder="--Aucun--"
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                placeholderStyle={styles.dropdownPlaceholder}
+                arrowIconStyle={styles.dropdownArrow}
+                tickIconStyle={styles.dropdownTick}
+                searchable={true}
+                searchPlaceholder="Rechercher..."
+                searchTextInputStyle={styles.searchInput}
+              />
             </View>
-            <View style={styles.inputHalf}>
+            <View style={[styles.inputHalf, { zIndex: 800 }]}>
               <Text style={styles.label}>Mère</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={mother}
-                  style={styles.picker}
-                  onValueChange={setMother}
-                  dropdownIconColor="white"
-                >
-                  {renderPickerItems(getFilteredPersonnes("Femme", true), "--Aucune--")}
-                </Picker>
-              </View>
+              <DropDownPicker
+                open={motherOpen}
+                value={mother}
+                items={motherItems}
+                setOpen={setMotherOpen}
+                setValue={setMother}
+                setItems={setMotherItems}
+                onOpen={() => closeOtherDropdowns('mother')}
+                placeholder="--Aucune--"
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                placeholderStyle={styles.dropdownPlaceholder}
+                arrowIconStyle={styles.dropdownArrow}
+                tickIconStyle={styles.dropdownTick}
+                searchable={true}
+                searchPlaceholder="Rechercher..."
+                searchTextInputStyle={styles.searchInput}
+              />
             </View>
           </View>
 
           {/* Conjoint et Date de décès */}
           <View style={styles.rowContainer}>
-            <View style={styles.inputHalf}>
+            <View style={[styles.inputHalf, { zIndex: 700 }]}>
               <Text style={styles.label}>Conjoint</Text>
-              <View style={[styles.pickerContainer, !gender && styles.disabledPicker]}>
-                <Picker
-                  selectedValue={conjoint}
-                  style={styles.picker}
-                  onValueChange={setConjoint}
-                  enabled={!!gender}
-                  dropdownIconColor={gender ? "white" : "#6B7280"}
-                >
-                  {renderPickerItems(getConjointOptions(), "--Aucun--")}
-                </Picker>
-              </View>
-              {gender && getConjointOptions().length === 0 && (
+              <DropDownPicker
+                open={conjointOpen}
+                value={conjoint}
+                items={conjointItems}
+                setOpen={setConjointOpen}
+                setValue={setConjoint}
+                setItems={setConjointItems}
+                onOpen={() => closeOtherDropdowns('conjoint')}
+                placeholder="--Aucun--"
+                disabled={!gender}
+                style={[
+                  styles.dropdown, 
+                  !gender && styles.disabledDropdown
+                ]}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                placeholderStyle={styles.dropdownPlaceholder}
+                arrowIconStyle={styles.dropdownArrow}
+                tickIconStyle={styles.dropdownTick}
+                searchable={true}
+                searchPlaceholder="Rechercher..."
+                searchTextInputStyle={styles.searchInput}
+              />
+              {gender && conjointItems.length === 0 && (
                 <Text style={styles.helperText}>
                   Aucun {gender === "Homme" ? "femme" : "homme"} disponible
                 </Text>
@@ -381,7 +524,7 @@ export default function PersonForm({
                   </TouchableOpacity>
                 </View>
               ) : (
-                <View>
+                <Animated.View entering={FadeIn}>
                   <Text style={styles.label}>Date de décès</Text>
                   <TextInput
                     style={styles.textInput}
@@ -390,14 +533,14 @@ export default function PersonForm({
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#9CA3AF"
                   />
-                </View>
+                </Animated.View>
               )}
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Notes */}
-        <View style={styles.fullWidthContainer}>
+        <Animated.View entering={SlideInDown.delay(400)} style={styles.fullWidthContainer}>
           <Text style={styles.label}>Notes</Text>
           <TextInput
             style={[styles.textInput, styles.textArea]}
@@ -409,10 +552,10 @@ export default function PersonForm({
             numberOfLines={4}
             textAlignVertical="top"
           />
-        </View>
+        </Animated.View>
 
         {/* Boutons d'action */}
-        <View style={styles.buttonContainer}>
+        <Animated.View entering={SlideInDown.delay(500)} style={styles.buttonContainer}>
           <TouchableOpacity 
             style={[styles.submitButton, loading && styles.disabledButton]}
             onPress={handleSubmit}
@@ -436,9 +579,9 @@ export default function PersonForm({
               <Text style={styles.resetButtonText}>Réinitialiser</Text>
             </TouchableOpacity>
           )}
-        </View>
-      </View>
-    </ScrollView>
+        </Animated.View>
+      </Animated.View>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -498,7 +641,7 @@ const styles = StyleSheet.create({
   label: {
     color: "#67E8F9",
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 8,
     fontSize: 16,
   },
   textInput: {
@@ -509,24 +652,47 @@ const styles = StyleSheet.create({
     padding: 12,
     color: "white",
     fontSize: 16,
+    minHeight: 50,
   },
   textArea: {
     height: 100,
     textAlignVertical: "top",
   },
-  pickerContainer: {
+  // Styles pour les dropdowns
+  dropdown: {
     backgroundColor: "#374151",
-    borderWidth: 1,
     borderColor: "#06B6D4",
+    borderWidth: 1,
     borderRadius: 6,
-    overflow: "hidden",
+    minHeight: 50,
   },
-  picker: {
-    color: "white",
+  dropdownContainer: {
     backgroundColor: "#374151",
-    height: 50,
+    borderColor: "#06B6D4",
+    borderWidth: 1,
+    borderRadius: 6,
+    maxHeight: 200,
   },
-  disabledPicker: {
+  dropdownText: {
+    color: "white",
+    fontSize: 16,
+  },
+  dropdownPlaceholder: {
+    color: "#9CA3AF",
+    fontSize: 16,
+  },
+  dropdownArrow: {
+    tintColor: "white",
+  },
+  dropdownTick: {
+    tintColor: "#06B6D4",
+  },
+  searchInput: {
+    backgroundColor: "#4B5563",
+    borderColor: "#6B7280",
+    color: "white",
+  },
+  disabledDropdown: {
     opacity: 0.5,
     borderColor: "#6B7280",
   },

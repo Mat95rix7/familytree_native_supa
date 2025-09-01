@@ -2,18 +2,18 @@ import { supabase } from '../lib/supabaseClient';
 
 // Configuration de votre API Vercel
 const API_BASE_URL = 'https://familytreez.vercel.app';
+// const API_BASE_URL = 'http://192.168.1.50:3000';
 
 export async function apiFetch(path, options = {}) {
   try {
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    const url = `${API_BASE_URL}/api${cleanPath}`;
+    const normalizedPath = cleanPath.replace(/\/+$/, "");
+    const url = `${API_BASE_URL}/api${normalizedPath}`;
     
     // Récupérer le token Supabase à la volée
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || null;
-    
     const headers = {
-      'Content-Type': 'application/json',
       ...(options.headers || {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
@@ -22,7 +22,7 @@ export async function apiFetch(path, options = {}) {
       ...options, 
       headers 
     });
-
+    
     // Gérer ici les erreurs si besoin (401 par exemple)
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);

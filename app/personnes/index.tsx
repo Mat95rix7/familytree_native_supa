@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,28 +13,52 @@ import {
 import PersonCard from "../../components/PersonCard";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../services/FetchAPI";
+import { Personne } from "../../types";
+
+interface ApiResponse {
+  data?: Personne[];
+  message?: string;
+}
+
+interface SortConfig {
+  key: keyof Personne | null;
+  direction: 'asc' | 'desc';
+}
 
 export default function PersonnesList() {
-  const [personnes, setPersonnes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [personnes, setPersonnes] = useState<Personne[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: "asc" });
 
   const { role } = useAuth();
   const isAdmin = role === "admin";
 
-  useEffect(() => {
-    apiFetch("/personnes")
-      .then((res) => res.json())
-      .then((data) => {
-        setPersonnes(data);
-        setLoading(false);
-      })
-      .catch((error) => {
+    useEffect(() => {
+    const loadPersonnes = async (): Promise<void> => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await apiFetch("/personnes");
+        const data: Personne[] | ApiResponse = await response.json();
+        
+        // Gérer différents formats de réponse API
+        const personnesData: Personne[] = Array.isArray(data) ? data : data.data || [];
+        
+        setPersonnes(personnesData);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue s'est produite";
         console.error("Erreur lors du chargement:", error);
-        setLoading(false);
+        setError(errorMessage);
         Alert.alert("Erreur", "Impossible de charger les données");
-      });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPersonnes();
   }, []);
 
   const sortOptions = [
@@ -44,35 +68,37 @@ export default function PersonnesList() {
     { key: "birth_date", label: "Année" },
   ];
 
-  // Recherche
-  const filtered = personnes.filter((p) =>
-    `${p.first_name} ${p.last_name} ${p.birth_place}`
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase())
-  );
+    // Filtrage et tri optimisés avec useMemo
+  const sorted = useMemo<Personne[]>(() => {
+    // Filtrage
+    const filtered = personnes.filter((personne: Personne) =>
+      `${personne.first_name} ${personne.last_name} ${personne.birth_place || ""}`
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase())
+    );
 
-  // Tri
-  const sorted = [...filtered].sort((a, b) => {
-    const key = sortConfig.key;
-    if (!key) return 0;
+    // Tri
+    if (!sortConfig.key) return filtered;
 
-    let aVal = a[key] || "";
-    let bVal = b[key] || "";
+return [...filtered].sort((a, b): number => {
+  const key = sortConfig.key!;
+  
+  if (key === "birth_date") {
+    const aVal = a[key] ? new Date(a[key] as string).getTime() : 0;
+    const bVal = b[key] ? new Date(b[key] as string).getTime() : 0;
+    return sortConfig.direction === "asc" ? aVal - bVal : bVal - aVal;
+  }
 
-    if (key === "birth_date") {
-      aVal = new Date(aVal);
-      bVal = new Date(bVal);
-    } else {
-      aVal = aVal.toString().toLowerCase();
-      bVal = bVal.toString().toLowerCase();
-    }
+  const aVal = (a[key] ?? "").toString().toLowerCase();
+  const bVal = (b[key] ?? "").toString().toLowerCase();
 
-    if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
-    if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
-    return 0;
-  });
+  if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+  if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+  return 0;
+});
+  }, [personnes, searchTerm, sortConfig]);
 
-  const handleSort = (key) => {
+  const handleSort = (key : keyof Personne) => {
     const direction =
       sortConfig.key === key && sortConfig.direction === "asc" ? "desc" : "asc";
     setSortConfig({ key, direction });
@@ -82,7 +108,7 @@ export default function PersonnesList() {
     router.push("/personnes/new");
   };
 
-  const renderSortButton = ({ item }) => (
+  const renderSortButton = ({ item }: { item: { key: keyof Personne; label: string } }) => (
     <TouchableOpacity
       key={item.key}
       style={[
@@ -98,7 +124,7 @@ export default function PersonnesList() {
     </TouchableOpacity>
   );
 
-  const renderPersonCard = ({ item }) => (
+  const renderPersonCard = ({ item }: { item: Personne }) => (
     <PersonCard personne={item} />
   );
 
@@ -173,11 +199,12 @@ export default function PersonnesList() {
 
   return (
     <View style={styles.container}>
+      {renderHeader()}
       <FlatList
         data={sorted}
         renderItem={renderPersonCard}
         keyExtractor={(item) => item.id.toString()}
-        ListHeaderComponent={renderHeader}
+        
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
         contentContainerStyle={styles.listContainer}

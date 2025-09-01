@@ -1,6 +1,6 @@
-import { RouteProp, useRoute } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useRoute } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, {  useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -14,21 +14,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { apiFetch, getPhotoUrl } from '../../../services/FetchAPI';
-
-type Personne = {
-  id: number;
-  first_name: string;
-  last_name: string;
-  gender?: string;
-  age?: number;
-  birth_date?: string;
-  birth_place?: string;
-  photo?: string;
-  notes?: string;
-  father?: Partial<Personne>;
-  mother?: Partial<Personne>;
-  conjoint?: Partial<Personne>;
-};
+import { Personne } from '../../../types';
 
 type RouteParams = {
   params: {
@@ -61,20 +47,30 @@ export default function PersonneDetail() {
 
   const { role } = useAuth();
 
-  useEffect(() => {
-    if (!id) return;
-    apiFetch(`/personnes/${id}/`)
-      .then((res) => res.json())
-      .then((data) => {
-        setPersonne(data);
-        setLoading(false);
-      });
-  }, [id]);
+  useFocusEffect(
+  React.useCallback(() => {
+    let isActive = true;
+    setLoading(true);
+
+    const fetchPersonne = async () => {
+      try {
+        const data = await apiFetch(`/personnes/${id}/`);
+        if (isActive) setPersonne(await data.json());
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (isActive) setLoading(false);
+      }
+    };
+    fetchPersonne();
+    return () => { isActive = false; };
+  }, [id])
+);
 
   const getIdFamille = () => {
-    if (!personne?.conjointId) return null;
+    if (!personne?.conjoint) return null;
     if (personne?.gender === 'Homme') return personne.id;
-    if (personne?.gender === 'Femme' && personne?.conjointId) return personne?.conjointId;
+    if (personne?.gender === 'Femme' && personne?.conjoint) return personne?.conjoint;
   return null;
 };
 
@@ -181,7 +177,6 @@ export default function PersonneDetail() {
             onPress={() =>
               {
                   const id = personne.id.toString();
-                  console.log(id)
                   router.push(`/personnes/${id}/edit`);
                 }
             }

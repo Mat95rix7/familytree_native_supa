@@ -3,17 +3,7 @@ import { useRouter } from 'expo-router';
 import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getPhotoUrl } from "../services/FetchAPI";
-
-type Personne = {
-  id: string;
-  first_name?: string;
-  last_name?: string;
-  gender?: string;
-  birth_date?: string;
-  birth_place?: string;
-  photo?: string;
-  father?: { first_name?: string };
-};
+import { Personne } from "../types/index";
 
 type Props = {
   personne: Personne;

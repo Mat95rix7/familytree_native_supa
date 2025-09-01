@@ -2,7 +2,7 @@ import DropDownPicker from 'react-native-dropdown-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { Check, ChevronDown } from "lucide-react-native";
 import {
     ActivityIndicator,
     Alert,
@@ -11,24 +11,11 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    ScrollView
 } from "react-native";
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { apiFetch } from "../services/FetchAPI";
-
-interface Personne {
-  id: number;
-  first_name: string;
-  last_name: string;
-  gender: string;
-  birth_date: string;
-  birth_place?: string;
-  fatherId?: number;
-  motherId?: number;
-  conjointId?: number;
-  notes?: string;
-  dateDeces?: string;
-  photo?: string;
-}
+import { Personne } from '../types';
 
 interface PersonFormProps {
   initialData?: Personne | null;
@@ -94,27 +81,9 @@ export default function PersonForm({
   const [motherItems, setMotherItems] = useState<DropdownItem[]>([]);
   const [conjointItems, setConjointItems] = useState<DropdownItem[]>([]);
 
-  const router = useRouter();
+  const maxAge = 20;
 
-  // Initialiser le formulaire avec les données existantes
-  useEffect(() => {
-    if (initialData && mode === "edit") {
-      setFirstName(initialData.first_name || "");
-      setLastName(initialData.last_name || "");
-      setGender(initialData.gender || "");
-      setBirthDate(initialData.birth_date || "");
-      setBirthPlace(initialData.birth_place || "");
-      setFather(initialData.fatherId ? initialData.fatherId.toString() : "");
-      setMother(initialData.motherId ? initialData.motherId.toString() : "");
-      setConjoint(initialData.conjointId ? initialData.conjointId.toString() : "");
-      setNotes(initialData.notes || "");
-      setDateDeces(initialData.dateDeces || "");
-      setShowDateDeces(!!initialData.dateDeces);
-      if (initialData.photo) {
-        setPhoto({ uri: initialData.photo });
-      }
-    }
-  }, [initialData, mode]);
+  const router = useRouter();
 
   // Charger la liste des personnes
   useEffect(() => {
@@ -122,7 +91,9 @@ export default function PersonForm({
       .then((res) => res.json())
       .then((data: Personne[]) => {
         setPersonnes(data);
-        updateDropdownItems(data);
+        if (initialData && mode === "edit") {
+          updateDropdownItems(data, initialData);
+        }
       })
       .catch((error) => {
         console.error("Erreur lors du chargement des personnes:", error);
@@ -130,41 +101,177 @@ export default function PersonForm({
       });
   }, []);
 
-  // Mettre à jour les items des dropdowns
-  const updateDropdownItems = (personnesData: Personne[]) => {
-    const hommes = personnesData
-      .filter(p => p.gender === "Homme" && (!initialData || p.id !== initialData.id))
-      .map(p => ({ label: `${p.last_name} ${p.first_name}`, value: p.id.toString() }));
-    
-    const femmes = personnesData
-      .filter(p => p.gender === "Femme" && (!initialData || p.id !== initialData.id))
-      .map(p => ({ label: `${p.last_name} ${p.first_name}`, value: p.id.toString() }));
-
-    setFatherItems(hommes);
-    setMotherItems(femmes);
-  };
-
-  // Mettre à jour les options de conjoint selon le genre
+  // Initialiser le formulaire avec les données existantes
   useEffect(() => {
-    if (gender && personnes.length > 0) {
-      const targetGender = gender === "Homme" ? "Femme" : "Homme";
-      const conjointOptions = personnes
-        .filter(p => p.gender === targetGender && (!initialData || p.id !== initialData.id))
-        .map(p => ({ label: `${p.last_name} ${p.first_name}`, value: p.id.toString() }));
-      
-      setConjointItems(conjointOptions);
-
-      // Vérifier si le conjoint actuel est toujours valide
-      if (conjoint) {
-        const isValidConjoint = conjointOptions.some(option => option.value === conjoint);
-        if (!isValidConjoint) {
-          setConjoint("");
-        }
-      }
-    } else {
-      setConjointItems([]);
+  if (initialData && mode === "edit") {
+    setFirstName(initialData.first_name || "");
+    setLastName(initialData.last_name || "");
+    setGender(initialData.gender || "");
+    setBirthDate(initialData.birth_date || "");
+    setBirthPlace(initialData.birth_place || "");
+    setNotes(initialData.notes || "");
+    setDateDeces(initialData.dateDeces || "");
+    setShowDateDeces(!!initialData.dateDeces);
+    if (initialData.photo) {
+      setPhoto({ uri: initialData.photo });
     }
-  }, [gender, personnes, initialData, conjoint]);
+    
+    // Si les personnes sont déjà chargées, mettre à jour les dropdowns
+    if (personnes.length > 0) {
+      updateDropdownItems(personnes, initialData);
+    }
+  }
+}, [initialData, mode, personnes]);
+
+  
+  useEffect(() => {
+  if (personnes.length > 0 && initialData && mode === "edit") {
+    updateDropdownItems(personnes, initialData);
+  }
+}, [personnes, initialData, mode]);
+
+useEffect(() => {
+  // S'assurer que les valeurs sont définies même si updateDropdownItems n'a pas encore été appelée
+  if (initialData && mode === "edit") {
+    if (initialData.fatherId && !father) {
+      setFather(initialData.fatherId.toString());
+    }
+    if (initialData.motherId && !mother) {
+      setMother(initialData.motherId.toString());
+    }
+    if (initialData.conjointId && !conjoint) {
+      setConjoint(initialData.conjointId.toString());
+    }
+  }
+}, [initialData, mode, father, mother, conjoint]);
+
+const updateDropdownItems = (personnesData: Personne[], current?: Personne) => {
+  if (!current || !personnesData || personnesData.length === 0) return;
+
+  // --- IDs à exclure de base ---
+  const excludeIds = new Set<number>();
+  excludeIds.add(current.id);
+  if (current.fatherId) excludeIds.add(current.fatherId);
+  if (current.motherId) excludeIds.add(current.motherId);
+  if (current.conjointId) excludeIds.add(current.conjointId);
+  current.children?.forEach(c => { if (c.id !== undefined) excludeIds.add(c.id); });
+
+  // Exclure frères/sœurs
+  personnesData
+    .filter(p =>
+      (current.fatherId && p.fatherId === current.fatherId) ||
+      (current.motherId && p.motherId === current.motherId)
+    )
+    .forEach(s => excludeIds.add(s.id));
+
+  // --- PÈRES ---
+  const peres = personnesData
+    .filter(p =>
+      p.gender === "Homme" &&
+      !excludeIds.has(p.id) &&
+      (!p.age || p.age >= maxAge) &&
+      !(current.children?.some(c => c.id === p.id))
+    )
+    .map(p => ({
+      label: `${p.last_name} ${p.first_name}`,
+      value: p.id.toString(),
+    }));
+
+  // Ajouter l'item sélectionné s'il n'est pas dans la liste (peut arriver avec les exclusions)
+  if (current.fatherId) {
+    const selectedFather = personnesData.find(p => p.id === current.fatherId);
+    if (selectedFather && !peres.some(p => p.value === current.fatherId?.toString())) {
+      peres.unshift({
+        label: `${selectedFather.last_name} ${selectedFather.first_name}`,
+        value: selectedFather.id.toString(),
+      });
+    }
+  }
+
+  const fatherDropdownItems = [{ label: "--Aucun--", value: "" }, ...peres];
+  setFatherItems(fatherDropdownItems);
+  
+  // IMPORTANT: définir la valeur APRÈS avoir défini les items
+  if (current.fatherId) {
+    const fatherValue = current.fatherId.toString();
+    // Vérifier que l'item existe dans la liste
+    const itemExists = fatherDropdownItems.some(item => item.value === fatherValue);
+    setFather(itemExists ? fatherValue : "");
+  } else {
+    setFather("");
+  }
+
+  // --- MÈRES ---
+  const meres = personnesData
+    .filter(p =>
+      p.gender === "Femme" &&
+      !excludeIds.has(p.id) &&
+      (!p.age || p.age >= maxAge) &&
+      !(current.children?.some(c => c.id === p.id))
+    )
+    .map(p => ({
+      label: `${p.last_name} ${p.first_name}`,
+      value: p.id.toString(),
+    }));
+
+  // Ajouter l'item sélectionné s'il n'est pas dans la liste
+  if (current.motherId) {
+    const selectedMother = personnesData.find(p => p.id === current.motherId);
+    if (selectedMother && !meres.some(p => p.value === current.motherId?.toString())) {
+      meres.unshift({
+        label: `${selectedMother.last_name} ${selectedMother.first_name}`,
+        value: selectedMother.id.toString(),
+      });
+    }
+  }
+
+  const motherDropdownItems = [{ label: "--Aucune--", value: "" }, ...meres];
+  setMotherItems(motherDropdownItems);
+  
+  if (current.motherId) {
+    const motherValue = current.motherId.toString();
+    const itemExists = motherDropdownItems.some(item => item.value === motherValue);
+    setMother(itemExists ? motherValue : "");
+  } else {
+    setMother("");
+  }
+
+  // --- CONJOINTS ---
+  const conjoints = personnesData
+    .filter(p =>
+      p.gender !== undefined &&
+      p.id !== current.id &&
+      !excludeIds.has(p.id) &&
+      (!p.age || p.age >= maxAge) &&
+      ((current.gender === "Homme" && p.gender === "Femme") || (current.gender === "Femme" && p.gender === "Homme"))
+    )
+    .map(p => ({
+      label: `${p.last_name} ${p.first_name}`,
+      value: p.id.toString(),
+    }));
+
+  if (current.conjointId) {
+    const selectedConjoint = personnesData.find(p => p.id === current.conjointId);
+    if (selectedConjoint && !conjoints.some(p => p.value === current.conjointId?.toString())) {
+      conjoints.unshift({
+        label: `${selectedConjoint.last_name} ${selectedConjoint.first_name}`,
+        value: selectedConjoint.id.toString(),
+      });
+    }
+  }
+
+  const conjointDropdownItems = [{ label: "-Aucun(e)-", value: "" }, ...conjoints];
+  setConjointItems(conjointDropdownItems);
+  
+  if (current.conjointId) {
+    const conjointValue = current.conjointId.toString();
+    const itemExists = conjointDropdownItems.some(item => item.value === conjointValue);
+    setConjoint(itemExists ? conjointValue : "");
+  } else {
+    setConjoint("");
+  }
+};
+
 
   const pickImage = async (): Promise<void> => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -217,9 +324,15 @@ export default function PersonForm({
       }
 
       // Relations familiales
-      formData.append("fatherId", father || '');
-      formData.append("motherId", mother || '');
-      formData.append("conjointId", conjoint || '');
+      if (father && father !== "") {
+        formData.append("fatherId", father);
+      }
+      if (mother && mother !== "") {
+        formData.append("motherId", mother);
+      }
+      if (conjoint && conjoint !== "") {
+        formData.append("conjointId", conjoint);
+      }
 
       // Date de décès
       if (date_deces) {
@@ -320,7 +433,7 @@ export default function PersonForm({
   };
 
   return (
-    <KeyboardAwareScrollView 
+    <ScrollView 
       style={styles.container} 
       showsVerticalScrollIndicator={false}
       nestedScrollEnabled={true}
@@ -392,7 +505,7 @@ export default function PersonForm({
 
           {/* Sexe et Photo */}
           <View style={styles.rowContainer}>
-            <View style={[styles.inputHalf, { zIndex: 1000 }]}>
+            <View style={[styles.inputHalf, { zIndex: 1000}]}>
               <Text style={styles.label}>Sexe *</Text>
               <DropDownPicker
                 open={genderOpen}
@@ -401,14 +514,22 @@ export default function PersonForm({
                 setOpen={setGenderOpen}
                 setValue={setGender}
                 setItems={setGenderItems}
+                listMode="MODAL"
+                modalProps={{
+                  animationType: "slide",
+                  transparent: false, 
+                }}
+                modalContentContainerStyle={styles.modalContent}
+                modalTitle="Sélectionne un genre"
+                modalTitleStyle={styles.modalTitle} 
+                modalAnimationType="slide"
                 onOpen={() => closeOtherDropdowns('gender')}
-                placeholder="--Choisir--"
                 style={styles.dropdown}
                 dropDownContainerStyle={styles.dropdownContainer}
                 textStyle={styles.dropdownText}
                 placeholderStyle={styles.dropdownPlaceholder}
-                arrowIconStyle={styles.dropdownArrow}
-                tickIconStyle={styles.dropdownTick}
+                ArrowDownIconComponent={() => <ChevronDown color="white" size={20} />}
+                TickIconComponent={() => <Check color="#06B6D4" size={18} />}
               />
             </View>
             <View style={styles.inputHalf}>
@@ -442,14 +563,23 @@ export default function PersonForm({
                 setOpen={setFatherOpen}
                 setValue={setFather}
                 setItems={setFatherItems}
+                listMode="MODAL"
+                modalProps={{
+                  animationType: "slide",
+                  transparent: false, 
+                }}
+                modalContentContainerStyle={styles.modalContent}
+                modalTitle="Sélectionner un père"
+                modalTitleStyle={styles.modalTitle}            
+                modalAnimationType="slide"
                 onOpen={() => closeOtherDropdowns('father')}
-                placeholder="--Aucun--"
                 style={styles.dropdown}
                 dropDownContainerStyle={styles.dropdownContainer}
                 textStyle={styles.dropdownText}
                 placeholderStyle={styles.dropdownPlaceholder}
-                arrowIconStyle={styles.dropdownArrow}
-                tickIconStyle={styles.dropdownTick}
+                placeholder="--Aucun--"
+                ArrowDownIconComponent={() => <ChevronDown color="white" size={20} />}
+                TickIconComponent={() => <Check color="#06B6D4" size={18} />}
                 searchable={true}
                 searchPlaceholder="Rechercher..."
                 searchTextInputStyle={styles.searchInput}
@@ -464,14 +594,23 @@ export default function PersonForm({
                 setOpen={setMotherOpen}
                 setValue={setMother}
                 setItems={setMotherItems}
+                                listMode="MODAL"
+                modalProps={{
+                  animationType: "slide",
+                  transparent: false, 
+                }}
+                modalContentContainerStyle={styles.modalContent}
+                modalTitle="Sélectionner une mère"
+                modalTitleStyle={styles.modalTitle}            
+                modalAnimationType="slide"
                 onOpen={() => closeOtherDropdowns('mother')}
                 placeholder="--Aucune--"
                 style={styles.dropdown}
                 dropDownContainerStyle={styles.dropdownContainer}
                 textStyle={styles.dropdownText}
                 placeholderStyle={styles.dropdownPlaceholder}
-                arrowIconStyle={styles.dropdownArrow}
-                tickIconStyle={styles.dropdownTick}
+                ArrowDownIconComponent={() => <ChevronDown color="white" size={20} />}
+                TickIconComponent={() => <Check color="#06B6D4" size={18} />}
                 searchable={true}
                 searchPlaceholder="Rechercher..."
                 searchTextInputStyle={styles.searchInput}
@@ -490,8 +629,16 @@ export default function PersonForm({
                 setOpen={setConjointOpen}
                 setValue={setConjoint}
                 setItems={setConjointItems}
+                listMode="MODAL"
+                modalProps={{
+                  animationType: "slide",
+                  transparent: false, 
+                }}
+                modalContentContainerStyle={styles.modalContent}
+                modalTitle="Sélectionner un conjoint"
+                modalTitleStyle={styles.modalTitle}            
+                modalAnimationType="slide"
                 onOpen={() => closeOtherDropdowns('conjoint')}
-                placeholder="--Aucun--"
                 disabled={!gender}
                 style={[
                   styles.dropdown, 
@@ -499,9 +646,10 @@ export default function PersonForm({
                 ]}
                 dropDownContainerStyle={styles.dropdownContainer}
                 textStyle={styles.dropdownText}
+                placeholder="--Aucun(e)--"
                 placeholderStyle={styles.dropdownPlaceholder}
-                arrowIconStyle={styles.dropdownArrow}
-                tickIconStyle={styles.dropdownTick}
+                ArrowDownIconComponent={() => <ChevronDown color="white" size={20} />}
+                TickIconComponent={() => <Check color="#06B6D4" size={18} />}
                 searchable={true}
                 searchPlaceholder="Rechercher..."
                 searchTextInputStyle={styles.searchInput}
@@ -581,7 +729,7 @@ export default function PersonForm({
           )}
         </Animated.View>
       </Animated.View>
-    </KeyboardAwareScrollView>
+    </ScrollView>
   );
 }
 
@@ -642,7 +790,7 @@ const styles = StyleSheet.create({
     color: "#67E8F9",
     fontWeight: "600",
     marginBottom: 8,
-    fontSize: 16,
+    fontSize: 20,
   },
   textInput: {
     backgroundColor: "#374151",
@@ -651,7 +799,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 12,
     color: "white",
-    fontSize: 16,
+    fontSize: 20,
     minHeight: 50,
   },
   textArea: {
@@ -675,17 +823,13 @@ const styles = StyleSheet.create({
   },
   dropdownText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 20,
+    textAlign: "left",
+    paddingHorizontal: 16,
   },
   dropdownPlaceholder: {
     color: "#9CA3AF",
-    fontSize: 16,
-  },
-  dropdownArrow: {
-    tintColor: "white",
-  },
-  dropdownTick: {
-    tintColor: "#06B6D4",
+    fontSize: 20,
   },
   searchInput: {
     backgroundColor: "#4B5563",
@@ -708,7 +852,7 @@ const styles = StyleSheet.create({
   },
   photoButtonText: {
     color: "#9CA3AF",
-    fontSize: 16,
+    fontSize: 20,
   },
   moreButton: {
     backgroundColor: "rgba(6, 182, 212, 0.1)",
@@ -759,7 +903,7 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: "#064E3B",
     fontWeight: "bold",
-    fontSize: 16,
+    fontSize: 20,
   },
   resetButton: {
     backgroundColor: "#4B5563",
@@ -774,5 +918,17 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+  modalContent: {
+    flex: 1,
+    backgroundColor: "#374151",
+    padding: 16,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#06B6D4",
+    marginBottom: 12,
+    textAlign: "center",
   },
 });

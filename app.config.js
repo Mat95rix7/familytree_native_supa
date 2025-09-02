@@ -43,16 +43,15 @@ export default ({ config }) => ({
       typedRoutes: true
     },
     extra: {
-      supabaseUrl:
-        process.env.EXPO_PUBLIC_SUPABASE_URL ?? "https://your-default-supabase-url",
-      supabaseAnonKey:
-        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "your-default-anon-key",
-      router: {},
+      ...config.extra,
+      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      // router: {},
       eas: {
-        projectId: "ca0f6f8b-94b1-4416-9086-b49340240874",
+        projectId: "c5ea548e-4e15-44f2-9b7d-c5ab74bde215"
       },
 
-        // projectId: "c5ea548e-4e15-44f2-9b7d-c5ab74bde215"
+        
     }
   }
 }); 

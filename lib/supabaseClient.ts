@@ -3,8 +3,12 @@ import { createClient } from "@supabase/supabase-js"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 // Variables d'environnement depuis le `.env`
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string
+// const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string
+// const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string
+import Constants from "expo-constants"
+
+const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl as string
+const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey as string
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(

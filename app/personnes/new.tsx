@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
-import PersonForm from '../../components/PersonForm';
+import { PersonForm } from '../../components/PersonForm'
 import { apiFetch } from '../../services/FetchAPI';
 
 // Ajout de la fonction utilitaire pour convertir une data URI en Blob

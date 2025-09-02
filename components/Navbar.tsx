@@ -34,7 +34,7 @@ export default function Navbar() {
     ];
 
     if (role === 'admin') {
-      baseItems.push({ label: 'Admin', route: '/admin', icon: 'shield-checkmark-outline' });
+      baseItems.push({ label: 'Administration', route: '/admin', icon: 'shield-checkmark-outline' });
     }
 
     return baseItems;
@@ -57,7 +57,11 @@ export default function Navbar() {
           {/* User greeting et menu burger */}
           <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.userGreeting}>
             <Text style={styles.greetingText}>
-              Salam, {username.charAt(0).toUpperCase() + username.slice(1)} 👋
+              Salam,{" "}
+              <Text style={styles.userName}>
+                {username.charAt(0).toUpperCase() + username.slice(1)}
+              </Text>{" "}
+              👋
             </Text>
             <Ionicons name="menu" size={28} color="#f59e0b" />
           </TouchableOpacity>
@@ -107,7 +111,7 @@ export default function Navbar() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#8b5cf6', // Couleur unie au lieu du gradient
+    backgroundColor: '#8b5cf6',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -122,6 +126,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 40,
     height: 40,
+    borderRadius: 10,
   },
   title: {
     color: 'white',
@@ -135,10 +140,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   greetingText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: '#e5e7eb',
+    fontWeight: '600',
     marginRight: 6,
     fontSize: 18,
+  },
+    userName: {
+    color: "#67e8f9", 
+    fontWeight: "bold",
   },
   loginButton: {
     backgroundColor: '#0ea5e9',
@@ -170,10 +179,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#374151',
   },
   modalItemText: {
-    color: '#f59e0b',
+    color: '#67e8f9',
     fontWeight: 'bold',
     marginLeft: 12,
-    fontSize: 16,
+    fontSize: 18,
   },
   modalClose: {
     padding: 12,
@@ -182,5 +191,6 @@ const styles = StyleSheet.create({
   closeButtonText: {
     color: '#f59e0b',
     fontWeight: 'bold',
+    fontSize: 18,
   },
 });

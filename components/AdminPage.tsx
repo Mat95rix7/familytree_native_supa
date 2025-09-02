@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,22 +15,86 @@ import {
   View,
 } from 'react-native';
 import { apiFetch } from '../services/FetchAPI';
+import { useFocusEffect } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
-const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('stats');
-  const [users, setUsers] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState({});
-  const [editingUser, setEditingUser] = useState(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+// Types et interfaces
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: 'user' | 'admin';
+  isActive: boolean;
+}
+
+interface UserForm {
+  username: string;
+  email: string;
+  password: string;
+  role: 'user' | 'admin';
+  isActive: boolean;
+}
+
+interface UserStats {
+  role: string;
+  count: string;
+}
+
+interface PersonStats {
+  totalPersons: number;
+  deceased: number;
+  averageAge: number;
+}
+
+interface GenderDistribution {
+  gender: string | null;
+  count: string;
+}
+
+interface Stats {
+  users: UserStats[];
+  persons: PersonStats;
+  genderDistribution: GenderDistribution[];
+}
+
+interface Pagination {
+  currentPage: number;
+  pages: number;
+  total: number;
+  limit: number;
+}
+
+interface UsersResponse {
+  users: User[];
+  pagination: Pagination;
+}
+
+interface EditUserModalProps {
+  user: User | null;
+  onSave: (user: User) => void;
+  onCancel: () => void;
+}
+
+const AdminDashboard: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'stats' | 'users'>('stats');
+  const [users, setUsers] = useState<User[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [familles, setFamilles] = useState<any[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({
+    currentPage: 1,
+    pages: 1,
+    total: 0,
+    limit: 10
+  });
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
 
   // Formulaire pour créer/modifier un utilisateur
-  const [userForm, setUserForm] = useState({
+  const [userForm, setUserForm] = useState<UserForm>({
     username: '',
     email: '',
     password: '',
@@ -38,12 +102,24 @@ const AdminDashboard = () => {
     isActive: true
   });
 
+    useFocusEffect(
+        useCallback(() => {
+          setLoading(true);
+          apiFetch('/familles')
+            .then(res => res.json())
+            .then(data => {
+              setFamilles(data);
+              setLoading(false);
+            });
+        }, [])
+      );
+
   // Charger les statistiques
-  const loadStats = async () => {
+  const loadStats = async (): Promise<void> => {
     setLoading(true);
     try {
       const response = await apiFetch('/admin/stats');
-      const data = await response.json();
+      const data: Stats = await response.json();
       setStats(data);
     } catch (error) {
       console.error('Erreur lors du chargement des stats:', error);
@@ -53,13 +129,13 @@ const AdminDashboard = () => {
   };
 
   // Charger les utilisateurs
-  const loadUsers = async (page = 1, search = '') => {
+  const loadUsers = async (page: number = 1, search: string = ''): Promise<void> => {
     setLoading(true);
     try {
       const response = await apiFetch(
         `/admin/users?page=${page}&limit=10&search=${search}`
       );
-      const data = await response.json();
+      const data: UsersResponse = await response.json();
       setUsers(data.users);
       setPagination(data.pagination);
     } catch (error) {
@@ -70,7 +146,7 @@ const AdminDashboard = () => {
   };
 
   // Supprimer un utilisateur
-  const deleteUser = async (userId) => {
+  const deleteUser = async (userId: number): Promise<void> => {
     Alert.alert(
       'Confirmation',
       'Êtes-vous sûr de vouloir supprimer cet utilisateur ?',
@@ -101,7 +177,7 @@ const AdminDashboard = () => {
   };
 
   // Mettre à jour un utilisateur
-  const updateUser = async (userData) => {
+  const updateUser = async (userData: User): Promise<void> => {
     try {
       const response = await apiFetch(`/admin/users/${userData.id}`, {
         method: 'PUT',
@@ -122,7 +198,7 @@ const AdminDashboard = () => {
   };
 
   // Créer un utilisateur
-  const createUser = async (userData) => {
+  const createUser = async (userData: UserForm): Promise<void> => {
     try {
       const response = await apiFetch('/admin/users', {
         method: 'POST',
@@ -152,24 +228,24 @@ const AdminDashboard = () => {
   }, [activeTab, currentPage, searchTerm]);
 
   // Composant Modal pour éditer un utilisateur
-  const EditUserModal = ({ user, onSave, onCancel }) => (
+  const EditUserModal: React.FC<EditUserModalProps> = ({ user, onSave, onCancel }) => (
     <Modal visible={!!user} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Modifier l'utilisateur</Text>
+          <Text style={styles.modalTitle}>Modifier l&apos;utilisateur</Text>
           
           <TextInput
             style={styles.input}
             placeholder="Nom d'utilisateur"
             value={user?.username || ''}
-            onChangeText={(text) => setEditingUser({...user, username: text})}
+            onChangeText={(text) => user && setEditingUser({...user, username: text})}
           />
           
           <TextInput
             style={styles.input}
             placeholder="Email"
             value={user?.email || ''}
-            onChangeText={(text) => setEditingUser({...user, email: text})}
+            onChangeText={(text) => user && setEditingUser({...user, email: text})}
             keyboardType="email-address"
           />
           
@@ -178,7 +254,7 @@ const AdminDashboard = () => {
             <View style={styles.roleButtons}>
               <TouchableOpacity
                 style={[styles.roleButton, user?.role === 'user' && styles.roleButtonActive]}
-                onPress={() => setEditingUser({...user, role: 'user'})}
+                onPress={() => user && setEditingUser({...user, role: 'user'})}
               >
                 <Text style={[styles.roleButtonText, user?.role === 'user' && styles.roleButtonTextActive]}>
                   Utilisateur
@@ -186,7 +262,7 @@ const AdminDashboard = () => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.roleButton, user?.role === 'admin' && styles.roleButtonActive]}
-                onPress={() => setEditingUser({...user, role: 'admin'})}
+                onPress={() => user && setEditingUser({...user, role: 'admin'})}
               >
                 <Text style={[styles.roleButtonText, user?.role === 'admin' && styles.roleButtonTextActive]}>
                   Admin
@@ -199,7 +275,12 @@ const AdminDashboard = () => {
             <Text style={styles.label}>Compte actif</Text>
             <Switch
               value={user?.isActive || false}
-              onValueChange={(value) => setEditingUser({...user, isActive: value})}
+              onValueChange={(value) => {
+                                  if (user) {
+                                    setEditingUser({...user, isActive: value});
+                                  }
+                                }}
+              // onValueChange={(value) => user && setEditingUser({...user, isActive: value})}
             />
           </View>
           
@@ -207,7 +288,10 @@ const AdminDashboard = () => {
             <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
               <Text style={styles.cancelButtonText}>Annuler</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.saveButton} onPress={() => onSave(user)}>
+            <TouchableOpacity 
+              style={styles.saveButton} 
+              onPress={() => user && onSave(user)}
+            >
               <Text style={styles.saveButtonText}>Sauvegarder</Text>
             </TouchableOpacity>
           </View>
@@ -217,7 +301,7 @@ const AdminDashboard = () => {
   );
 
   // Composant Modal pour créer un utilisateur
-  const CreateUserModal = () => (
+  const CreateUserModal: React.FC = () => (
     <Modal visible={showCreateModal} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
@@ -342,31 +426,32 @@ const AdminDashboard = () => {
               <>
                 <View style={styles.statsGrid}>
                   {/* Cartes de statistiques */}
+                  
                   <View style={styles.statCard}>
-                    <Ionicons name="people" size={32} color="#3B82F6" />
+                    <Ionicons name="home" size={32} color="#F59E0B" />
                     <View style={styles.statInfo}>
-                      <Text style={styles.statLabel}>Total Utilisateurs</Text>
-                      <Text style={styles.statValue}>
-                        {stats.users.reduce((sum, user) => sum + parseInt(user.count), 0)}
-                      </Text>
+                      <Text style={styles.statLabel}>Familles</Text>
+                      <Text style={styles.statValue}>{familles?.length || 0}</Text>
                     </View>
                   </View>
-
+                  
                   <View style={styles.statCard}>
-                    <Ionicons name="person-add" size={32} color="#10B981" />
+                    <Ionicons name="person" size={32} color="#10B981" />
                     <View style={styles.statInfo}>
                       <Text style={styles.statLabel}>Personnes</Text>
                       <Text style={styles.statValue}>{stats.persons.totalPersons}</Text>
                     </View>
                   </View>
 
-                  <View style={styles.statCard}>
+                  {/* <View style={styles.statCard}>
                     <Ionicons name="trending-up" size={32} color="#F59E0B" />
                     <View style={styles.statInfo}>
                       <Text style={styles.statLabel}>Décédés</Text>
                       <Text style={styles.statValue}>{stats.persons.deceased}</Text>
                     </View>
-                  </View>
+                  </View> */}
+
+
 
                   <View style={styles.statCard}>
                     <Ionicons name="calendar" size={32} color="#8B5CF6" />
@@ -374,6 +459,16 @@ const AdminDashboard = () => {
                       <Text style={styles.statLabel}>Âge moyen</Text>
                       <Text style={styles.statValue}>
                         {Math.round(stats.persons.averageAge || 0)} ans
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.statCard}>
+                    <Ionicons name="people" size={32} color="#3B82F6" />
+                    <View style={styles.statInfo}>
+                      <Text style={styles.statLabel}>Total Utilisateurs</Text>
+                      <Text style={styles.statValue}>
+                        {stats.users.reduce((sum, user) => sum + parseInt(user.count), 0)}
                       </Text>
                     </View>
                   </View>
@@ -581,7 +676,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#60A5FA',
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
     color: '#9CA3AF',
     marginLeft: 8,
@@ -635,7 +730,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
     color: '#9CA3AF',
     marginBottom: 4,
@@ -662,7 +757,7 @@ const styles = StyleSheet.create({
     borderColor: '#2D2D5A',
   },
   chartTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '500',
     color: '#FFFFFF',
     marginBottom: 16,
@@ -674,12 +769,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   chartLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#9CA3AF',
     textTransform: 'capitalize',
   },
   chartValue: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
     color: '#E5E7EB',
   },

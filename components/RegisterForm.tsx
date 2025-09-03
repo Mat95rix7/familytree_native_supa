@@ -81,6 +81,9 @@ const RegisterForm = () => {
       <TextInput
         style={[styles.input, errors.username && styles.inputError]}
         placeholder="Nom d'utilisateur"
+        placeholderTextColor="#9CA3AF"
+        autoComplete='username'
+        textContentType='username'
         value={formData.username}
         onChangeText={value => handleChange('username', value)}
       />
@@ -89,8 +92,11 @@ const RegisterForm = () => {
       <TextInput
         style={[styles.input, errors.email && styles.inputError]}
         placeholder="Email"
+        placeholderTextColor="#9CA3AF"
         keyboardType="email-address"
         autoCapitalize="none"
+        autoComplete='email'
+        textContentType='emailAddress'
         value={formData.email}
         onChangeText={value => handleChange('email', value)}
       />
@@ -99,6 +105,9 @@ const RegisterForm = () => {
       <TextInput
         style={[styles.input, errors.password && styles.inputError]}
         placeholder="Mot de passe"
+        placeholderTextColor="#9CA3AF"
+        autoComplete='new-password'
+        textContentType='newPassword'
         secureTextEntry
         value={formData.password}
         onChangeText={value => handleChange('password', value)}
@@ -136,7 +145,7 @@ const RegisterForm = () => {
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 300,
     alignSelf: 'center',
   },
   title: {

@@ -77,10 +77,14 @@ const LoginForm = () => {
 
       <TextInput
         style={[styles.input, emailError && styles.inputError]}
-        placeholder="Adresse email"
+        placeholder="Email"
         placeholderTextColor="#9CA3AF"
         keyboardType="email-address"
         autoCapitalize="none"
+        autoComplete='email'
+        textContentType='username'
+        importantForAutofill='yes'
+        autoCorrect={false}
         value={email}
         onChangeText={handleEmailChange}
       />
@@ -92,6 +96,10 @@ const LoginForm = () => {
         style={styles.input}
         placeholder="Mot de passe"
         placeholderTextColor="#9CA3AF"
+        autoComplete='password'
+        textContentType='password'
+        importantForAutofill='yes'
+        autoCorrect={false}
         secureTextEntry
         value={password}
         onChangeText={setPassword}
@@ -131,13 +139,13 @@ const LoginForm = () => {
 const styles = StyleSheet.create({
   formContainer: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 300,
     alignSelf: 'center',
   },
   title: {
     fontSize: 32,
     marginBottom: 20,
-    color: '#f59e0b', // amber-500
+    color: '#f59e0b',
     fontWeight: 'bold',
     textAlign: 'center',
   },
